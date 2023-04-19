@@ -1,6 +1,8 @@
 #![doc(html_root_url = "https://docs.rs/bno055/0.3.3")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use core::cell::RefCell;
+
 ///! Bosch Sensortec BNO055 9-axis IMU sensor driver.
 ///! Datasheet: https://ae-bst.resource.bosch.com/media/_tech/media/datasheets/BST-BNO055-DS000.pdf
 use embedded_hal::{
@@ -39,7 +41,7 @@ pub enum Error<E> {
 }
 
 pub struct Bno055<I> {
-    i2c: I,
+    i2c: RefCell<I>,
     pub mode: BNO055OperationMode,
     use_default_addr: bool,
 }
@@ -50,17 +52,12 @@ where
 {
     /// Side-effect-free constructor.
     /// Nothing will be read or written before `init()` call.
-    pub fn new(i2c: I) -> Self {
+    pub fn new(i2c: RefCell<I>) -> Self {
         Bno055 {
             i2c,
             mode: BNO055OperationMode::CONFIG_MODE,
             use_default_addr: true,
         }
-    }
-
-    /// Destroy driver instance, return I2C bus instance.
-    pub fn destroy(self) -> I {
-        self.i2c
     }
 
     /// Enables use of alternative I2C address `regs::BNO055_ALTERNATE_ADDR`.
@@ -436,6 +433,7 @@ where
         }
 
         self.i2c
+            .borrow_mut()
             .write(self.i2c_addr(), &buf_with_reg[..])
             .map_err(Error::I2c)?;
 
@@ -632,18 +630,26 @@ where
     fn read_u8(&mut self, reg: u8) -> Result<u8, E> {
         let mut byte: [u8; 1] = [0; 1];
 
-        match self.i2c.write_read(self.i2c_addr(), &[reg], &mut byte) {
+        match self
+            .i2c
+            .borrow_mut()
+            .write_read(self.i2c_addr(), &[reg], &mut byte)
+        {
             Ok(_) => Ok(byte[0]),
             Err(e) => Err(e),
         }
     }
 
     fn read_bytes(&mut self, reg: u8, buf: &mut [u8]) -> Result<(), E> {
-        self.i2c.write_read(self.i2c_addr(), &[reg], buf)
+        self.i2c
+            .borrow_mut()
+            .write_read(self.i2c_addr(), &[reg], buf)
     }
 
     fn write_u8(&mut self, reg: u8, value: u8) -> Result<(), E> {
-        self.i2c.write(self.i2c_addr(), &[reg, value])?;
+        self.i2c
+            .borrow_mut()
+            .write(self.i2c_addr(), &[reg, value])?;
 
         Ok(())
     }
